@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33205.214
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Image2Bytes", "Image2Bytes.csproj", "{B13A67FF-0C82-47BE-9E7E-21F224701980}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B13A67FF-0C82-47BE-9E7E-21F224701980}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B13A67FF-0C82-47BE-9E7E-21F224701980}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B13A67FF-0C82-47BE-9E7E-21F224701980}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B13A67FF-0C82-47BE-9E7E-21F224701980}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {18D0B997-9699-45E0-8A1B-AEA792ED93EC}
+	EndGlobalSection
+EndGlobal
