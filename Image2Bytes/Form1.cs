@@ -14,14 +14,8 @@ namespace Image2Bytes {
         Bitmap working_bitmap;
 
         Size demo_screen_size = new Size(128,32);
-        enum output_type {
-            BYTE, PACKED_BIT, INT
-        }
-        [Flags]
-        enum extra_output {
 
 
-        }
         public Form1() {
             InitializeComponent();
 
@@ -74,9 +68,10 @@ namespace Image2Bytes {
                     || fi.Extension == ".jpg" 
                     || fi.Extension == ".jpeg")
                 preview.Image = (Image)Bitmap.FromFile(file);
-
             } else {
-
+                output_name_textbox.Text = "";
+                preview.Image = null;
+                preview.Refresh();
             }
         }
 
@@ -167,5 +162,16 @@ namespace Image2Bytes {
             demo_screen_size = xy_res();
             preview.Refresh();
         }
+
+        private void demo_lcd_check_CheckedChanged(object sender, EventArgs e) {
+            if (demo_lcd_check.Checked) {
+                demo_screen_size = xy_res();
+                preview.Refresh();
+            } else {
+                demo_screen_size = Size.Empty;
+                preview.Refresh();
+            }
+        }
+        
     }
 }
