@@ -65,7 +65,7 @@ namespace Image2Bytes {
         private void MainForm_Load(object sender, EventArgs e) {
             output_form = new OutputForm();
 
-            SetWindowLongPtrA(output_form.Handle, GWL_STYLE, 0x004L);
+            SetWindowLongPtrA(output_form.Handle, GWL_STYLE, 0x4L | 0x004L);
 
             output_form.Show();
         }
@@ -121,7 +121,7 @@ namespace Image2Bytes {
         public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
 
         [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+        public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

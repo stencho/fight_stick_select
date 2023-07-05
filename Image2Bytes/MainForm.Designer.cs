@@ -23,7 +23,6 @@
         ///  the contents of this method with the code editor.
         /// </summary>
         private void InitializeComponent() {
-            this.filename_textbox = new System.Windows.Forms.TextBox();
             this.preview = new System.Windows.Forms.PictureBox();
             this.output_name_textbox = new System.Windows.Forms.TextBox();
             this.grabtab = new System.Windows.Forms.LinkLabel();
@@ -43,14 +42,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.preview)).BeginInit();
             this.SuspendLayout();
             // 
-            // filename_textbox
-            // 
-            this.filename_textbox.Location = new System.Drawing.Point(12, 43);
-            this.filename_textbox.Name = "filename_textbox";
-            this.filename_textbox.PlaceholderText = "Input Filename";
-            this.filename_textbox.Size = new System.Drawing.Size(245, 23);
-            this.filename_textbox.TabIndex = 1;
-            // 
             // preview
             // 
             this.preview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
@@ -64,7 +55,7 @@
             // 
             // output_name_textbox
             // 
-            this.output_name_textbox.Location = new System.Drawing.Point(12, 72);
+            this.output_name_textbox.Location = new System.Drawing.Point(12, 43);
             this.output_name_textbox.Name = "output_name_textbox";
             this.output_name_textbox.PlaceholderText = "Output Name";
             this.output_name_textbox.Size = new System.Drawing.Size(245, 23);
@@ -179,16 +170,16 @@
             this.listBox1.FormattingEnabled = true;
             this.listBox1.IntegralHeight = false;
             this.listBox1.ItemHeight = 15;
-            this.listBox1.Location = new System.Drawing.Point(12, 102);
+            this.listBox1.Location = new System.Drawing.Point(12, 72);
             this.listBox1.Name = "listBox1";
-            this.listBox1.Size = new System.Drawing.Size(245, 168);
+            this.listBox1.Size = new System.Drawing.Size(245, 185);
             this.listBox1.TabIndex = 16;
             // 
             // button1
             // 
             this.button1.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
             this.button1.ImageAlign = System.Drawing.ContentAlignment.TopLeft;
-            this.button1.Location = new System.Drawing.Point(12, 276);
+            this.button1.Location = new System.Drawing.Point(12, 263);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(245, 25);
             this.button1.TabIndex = 17;
@@ -203,7 +194,7 @@
             this.button2.Name = "button2";
             this.button2.Size = new System.Drawing.Size(245, 25);
             this.button2.TabIndex = 18;
-            this.button2.Text = "🡅";
+            this.button2.Text = "Add Image [Ctrl+N]";
             this.button2.UseVisualStyleBackColor = true;
             this.button2.Click += new System.EventHandler(this.button2_Click);
             // 
@@ -224,7 +215,7 @@
             this.AllowDrop = true;
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(520, 311);
+            this.ClientSize = new System.Drawing.Size(520, 297);
             this.Controls.Add(this.checkBox1);
             this.Controls.Add(this.button2);
             this.Controls.Add(this.button1);
@@ -239,10 +230,10 @@
             this.Controls.Add(this.bytes_rb);
             this.Controls.Add(this.grabtab);
             this.Controls.Add(this.output_name_textbox);
-            this.Controls.Add(this.filename_textbox);
             this.Controls.Add(this.preview);
             this.Controls.Add(this.bits_rb);
             this.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Name = "MainForm";
             this.Text = "Image2Array";
             this.Load += new System.EventHandler(this.MainForm_Load);
@@ -255,8 +246,6 @@
         }
 
         #endregion
-
-        private TextBox filename_textbox;
         private PictureBox preview;
         private TextBox output_name_textbox;
         private LinkLabel linkLabel1;
