@@ -365,3 +365,4 @@ FodyWeavers.xsd
 .gitold/*
 
 MagpieBuild/scr/
+digipottest/.vscode/settings.json
