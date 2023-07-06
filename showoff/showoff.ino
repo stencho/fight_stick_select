@@ -1,105 +1,342 @@
 #include <Adafruit_NeoPixel.h>
-
-//#include <Adafruit_GFX.h>
 #include <gfxfont.h>
-
 #include <Adafruit_SSD1306.h>
-//#include <splash.h>
 
-#include <Adafruit_NeoPixel.h>
+//PINS
+#define INPUT_UP 13
+#define INPUT_DOWN 12
+#define INPUT_LEFT 11
+#define INPUT_RIGHT 10
 
-#include <SPI.h>
-#include <SD.h>
-#include <Wire.h>
+#define DISABLE_CONTROLLER 6
 
+#define MENU_PIN A5
 
+#define LED_PIN 5
+
+//JOYSTICK INPUT
+enum stick_position {
+  UP = 1 << 0, 
+  DOWN = 1 << 1, 
+  LEFT = 1 << 2, 
+  RIGHT = 1 << 3,
+  UP_LEFT = UP | LEFT,
+  UP_RIGHT = UP | RIGHT,
+  DOWN_LEFT = DOWN | LEFT,
+  DOWN_RIGHT = DOWN | RIGHT,
+  CENTER = 0 
+};
+
+enum stick_output {
+  LEFT_STICK,
+  RIGHT_STICK, 
+  DPAD
+};
+
+static stick_output current_output_mode = DPAD;
+
+static stick_position stick_input = CENTER;
+static stick_position previous_stick_input = CENTER;
+
+static void read_stick() {
+  previous_stick_input = stick_input;
+  stick_position sp = CENTER;
+  if (digitalRead(INPUT_UP) == LOW) { sp = (stick_position)(sp | UP); }
+  if (digitalRead(INPUT_DOWN) == LOW) { sp = (stick_position)(sp | DOWN); }
+  if (digitalRead(INPUT_LEFT) == LOW) { sp = (stick_position)(sp | LEFT); }
+  if (digitalRead(INPUT_RIGHT) == LOW) { sp = (stick_position)(sp | RIGHT); }
+  stick_input = sp;
+}
+
+bool stick_has_pos(stick_position pos) { return ((stick_input & pos) == pos); }
+
+//STICK SELECTOR DISABLE PIN
+bool controller_enabled = true;
+
+void enable_controller_input() { 
+  controller_enabled = true;
+  digitalWrite(DISABLE_CONTROLLER, HIGH);
+}
+
+void disable_controller_input() {
+  controller_enabled = false;
+  digitalWrite(DISABLE_CONTROLLER, LOW);
+}
+
+//LED VARS
+Adafruit_NeoPixel strip(2, LED_PIN, NEO_GRB + NEO_KHZ800);
+int led_r = 250; int led_g = 0; int led_b = 170;
+
+//DISPLAY VARS
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-//SD CARD
-Sd2Card card;
-SdVolume volume;
-SdFile root;
-const int chipSelect = 4;
+enum LCD_menu_state { MAIN, STICK_SELECT, CONFIG };
+LCD_menu_state current_state = MAIN;
+LCD_menu_state old_state = MAIN;
 
+bool menu_button_down = false;
+bool menu_button_was_down = false;
 
-#define LED_PIN 5
-Adafruit_NeoPixel strip(2, LED_PIN, NEO_GRB + NEO_KHZ800);
+const int stick_select_axis_display_pos_x = 64;
+const int stick_select_axis_display_pos_y = 16;
+const int stick_select_axis_display_size = 12; //stick to even numbers
 
-#define LOGO_HEIGHT   16
-#define LOGO_WIDTH    16
-static const unsigned char PROGMEM logo_bmp[] = {
-0x00, 0x00, 0x80, 0x7C, 0xC0, 0x05, 0x38, 0x00, 0x00, 0x01, 0xF1, 0x00, 0x40, 0x18, 0x06, 0x00,
-0x00, 0x03, 0x86, 0x00, 0x80, 0x10, 0x10, 0x00, 0x00, 0x08, 0x80, 0x00, 0x80, 0x90, 0x03, 0x00,
-0x00, 0x60, 0xD8, 0x01, 0x81, 0x60, 0x09, 0x00, 0x00, 0x80, 0xF0, 0x01, 0xE1, 0x06, 0x01, 0x00,
-0x03, 0x00, 0x60, 0x03, 0xE3, 0x90, 0x09, 0x00, 0x0E, 0x00, 0x00, 0x01, 0x3E, 0x98, 0x08, 0x00,
-0x1C, 0x00, 0x40, 0x07, 0x0F, 0xC0, 0x09, 0x00, 0x3C, 0x00, 0xC0, 0x0F, 0x19, 0xC0, 0x09, 0x00,
-0x7C, 0x00, 0x80, 0x23, 0x3C, 0xE0, 0x03, 0x00, 0x38, 0x01, 0x84, 0x33, 0x24, 0xF8, 0x02, 0x00,
-0x78, 0x01, 0xD0, 0x07, 0x2C, 0xFC, 0x02, 0x00, 0x78, 0x03, 0x30, 0x0F, 0x29, 0xFE, 0x17, 0x00,
-0x38, 0x03, 0x50, 0x07, 0x59, 0xFF, 0x01, 0x00, 0x30, 0x03, 0x60, 0x07, 0x53, 0xFF, 0x00, 0x80,
-0x70, 0x03, 0x30, 0x06, 0x33, 0xFE, 0x00, 0x80, 0x70, 0x01, 0x10, 0x07, 0xC3, 0xFF, 0x00, 0x40,
-0x70, 0x00, 0x80, 0x07, 0x83, 0xFF, 0x00, 0x40, 0x70, 0x00, 0x00, 0x07, 0x0F, 0xFF, 0x00, 0x20,
-0x70, 0x00, 0x00, 0x23, 0xFF, 0xFF, 0x80, 0x20, 0x70, 0x08, 0x00, 0x37, 0xFF, 0xFE, 0x00, 0x10,
-0x78, 0x04, 0x00, 0x7F, 0xFF, 0xFE, 0x00, 0x10, 0x28, 0x37, 0x00, 0x1F, 0xFF, 0xFF, 0x80, 0x00,
-0x3C, 0x3F, 0xC0, 0x7F, 0xFF, 0xF8, 0x00, 0x08, 0x32, 0x3F, 0xFF, 0xFF, 0xFF, 0xFA, 0x40, 0x08,
-0x12, 0x7F, 0xF7, 0xFF, 0xFF, 0xE3, 0x20, 0x08, 0x0F, 0xFF, 0xE8, 0x3F, 0xFF, 0x84, 0x80, 0x04,
-0x0F, 0xFF, 0xDF, 0x0F, 0xFC, 0x18, 0x00, 0x04, 0x03, 0xFF, 0x94, 0x41, 0x04, 0x00, 0x00, 0x04,
-0x01, 0xFF, 0xC4, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00
-};
+const int main_axis_display_pos_x = 15;
+const int main_axis_display_pos_y = 16;
+const int main_axis_display_size = 15;
+
+static int last_activity = 0;
+const int blank_delay = 1000;
+static bool blanked = false;
+
+void draw_word(char* text, int X, int Y) {draw_word(text, X, Y, WHITE, CLEAR_FEATURE);}
+void draw_word(char* text, int X, int Y, int color_fg, int color_bg) {
+  int length = strlen(text);
+
+  for (int i = 0; i < length; i++) {
+    display.drawChar(X + (i * 6), Y, *(text + i), color_fg, color_bg, 1);
+  }
+}
+
+void draw_word_centered(char* text, int X, int Y) {draw_word_centered(text, X, Y, WHITE, CLEAR_FEATURE);}
+void draw_word_centered(char* text, int X, int Y, int color_fg, int color_bg) {
+  int length = strlen(text);
+  draw_word(text, X-((length * 6) / 2), Y, color_fg, color_bg);
+}
+
+void draw_word_right_align(char* text, int X, int Y) {draw_word_right_align(text, X, Y, WHITE, CLEAR_FEATURE);}
+void draw_word_right_align(char* text, int right_side, int Y, int color_fg, int color_bg) {
+  int length = strlen(text);
+  draw_word(text, (right_side - (length * 6)), Y, color_fg, color_bg);
+}
 
 void setup() {
-    Serial.begin(115200);
-  strip.begin();
+  pinMode(INPUT_UP, INPUT_PULLUP);
+  pinMode(INPUT_DOWN, INPUT_PULLUP);  
+  pinMode(INPUT_LEFT, INPUT_PULLUP);
+  pinMode(INPUT_RIGHT, INPUT_PULLUP);
   
-  if (!card.init(SPI_HALF_SPEED, chipSelect)) {    
-    Serial.println("Failed.");
+  pinMode(DISABLE_CONTROLLER, OUTPUT);
 
-    for(;;); // Don't proceed, loop forever
-  } else {
-    Serial.println("Wiring is correct and a card is present.");        
-  }
+  pinMode(MENU_PIN, INPUT_PULLUP);
 
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C, false)) { // Address 0x3C for 128x32
-    Serial.println(F("SSD1306 allocation failed"));
-    digitalWrite(13, LOW);
-    for(;;); // Don't proceed, loop forever
-  }
+  enable_controller_input();
+
+  Serial.begin(115200);
+
+  display.begin();
   display.dim(true);
-  
+
+  display.clearDisplay();
+  display.display();
+
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
   //RGB lighting
-  strip.setPixelColor(0, 250,0,170);
-  strip.setPixelColor(1, 250,0,170);
+  strip.begin();
+  strip.setPixelColor(0, led_r, led_g, led_b);
+  strip.setPixelColor(1, led_r, led_g, led_b);
   strip.show();
 }
 
 
-uint16_t drawRGB24toRGB565(uint8_t r, uint8_t g, uint8_t b)
-{
-  return ((r / 8) << 11) | ((g / 4) << 5) | (b / 8);
-}
+static stick_position pressed;
+static stick_position released;
+
+bool returning_to_main = false;
 
 void loop() {
+  if (!returning_to_main) returning_to_main = (old_state != MAIN && current_state == MAIN);
+  old_state = current_state;
+
+  strip.show();
+  read_stick();
+
+  pressed = (stick_position)(stick_input & ~previous_stick_input);
+  released = (stick_position)(~stick_input & previous_stick_input);
+
+  menu_button_was_down = menu_button_down;
+  menu_button_down = digitalRead(A5) == LOW;
+
+  if (stick_input == CENTER && !menu_button_down) {
+    last_activity++;
+
+  } else { 
+    last_activity = 0;
+    blanked = false;
+  }
+
+  //blank the LCD when idle
+  if (last_activity > blank_delay) { 
+    if (!blanked) {
+      display.clearDisplay();
+      display.display();
+      blanked = true;
+    }
+    return;
+  }
   
-  display.clearDisplay();
-  display.setTextSize(6);
-  display.setTextColor(drawRGB24toRGB565(250, 0, 120));
-  //display.setCursor(0,0);
+  //otherwise draw the screen
+
+  display.clearDisplay();  
   display.setRotation(0);
-  
-  //display.drawChar(0, 20, 'L', WHITE,  BLACK, 1);
 
-  //display.drawBitmap(-13,0-i, logo_bmp, 64, 32, BLACK, WHITE);
-  //display.drawBitmap(-13,32-i, logo_bmp, 64, 32, BLACK, WHITE);
-  //display.drawBitmap(-13,64-i, logo_bmp, 64, 32, BLACK, WHITE);
-  //display.drawBitmap(-13,96-i, logo_bmp, 64, 32, BLACK, WHITE);
-  //display.drawBitmap(-13,128-i, logo_bmp, 64, 32, BLACK, WHITE);
+  if (current_state == MAIN) {
+    draw_main_screen();
+
+    if (returning_to_main) {
+      if (stick_input == CENTER) {
+        returning_to_main = false;
+        enable_controller_input();
+      } 
+    }
+
+    if (menu_button_down) {
+      current_state = STICK_SELECT;
+      disable_controller_input();
+    }
+
+  } else if (current_state == STICK_SELECT) {
+    draw_stick_select_screen();
+    
+    if (!menu_button_down) {    
+      if (stick_input == UP) { current_state = CONFIG; current_state = MAIN;  }
+      else if (stick_input == DOWN) { current_output_mode = DPAD; current_state = MAIN; }
+      else if (stick_input == LEFT) { current_output_mode = LEFT_STICK; current_state = MAIN; }
+      else if (stick_input == RIGHT) { current_output_mode = RIGHT_STICK; current_state = MAIN; }
+      else { current_state = MAIN; }
+    }
+  } else if (current_state == CONFIG) {    
+    current_state == MAIN;
+  }
+  
   display.display();
+}
 
-  //i++;
-  
+void draw_axis_display(int pos_x, int pos_y, int size, bool draw_line = false, bool draw_border = true, int color = WHITE) {
+  int crosshair_size = (size / 2);
+  if (crosshair_size % 2 != 0)  crosshair_size-=1;
+
+  if (draw_border) {
+    display.drawRect(
+      pos_x - (size/2), pos_y - (size/2), 
+      size+1,  size+1,
+      color);
+  }
+
+  if (stick_input == CENTER) {    
+    display.drawLine(
+      pos_x - (crosshair_size / 2), pos_y, 
+      pos_x + (crosshair_size / 2), pos_y,
+      color);
+    display.drawLine(
+      pos_x, pos_y - (crosshair_size / 2), 
+      pos_x, pos_y + (crosshair_size / 2),
+      color);
+  } else {
+    int render_circle_x = 0;
+    int render_circle_y = 0;
+
+    if (stick_has_pos(UP)) render_circle_y -= (size/2);
+    if (stick_has_pos(DOWN)) render_circle_y += (size/2);
+    if (stick_has_pos(LEFT)) render_circle_x -= (size/2);
+    if (stick_has_pos(RIGHT)) render_circle_x += (size/2);
+    
+    render_circle_x += pos_x;
+    render_circle_y += pos_y;
+
+    display.drawLine(
+      pos_x, pos_y, 
+      render_circle_x, render_circle_y,
+      color);
+
+    /*
+    display.drawLine(
+      render_circle_x - (crosshair_size / 2), render_circle_y, 
+      render_circle_x + (crosshair_size / 2), render_circle_y,
+      color);
+    
+    display.drawLine(
+      render_circle_x, render_circle_y - (crosshair_size / 2), 
+      render_circle_x, render_circle_y + (crosshair_size / 2),
+      color);
+      */
+  }
+}
+
+void draw_axis_display_circle(int pos_x, int pos_y, int radius, bool draw_line = false, bool draw_border = true, int color = WHITE) {
+  int crosshair_size = radius;
+  if (crosshair_size % 2 != 0)  crosshair_size-=1;
+
+  if (draw_border) {
+    display.drawCircle(
+      pos_x, pos_y, 
+      radius,color);
+  }
+
+  if (stick_input == CENTER) {    
+    display.drawLine(
+      pos_x - (crosshair_size / 2), pos_y, 
+      pos_x + (crosshair_size / 2), pos_y,
+      color);
+    display.drawLine(
+      pos_x, pos_y - (crosshair_size / 2), 
+      pos_x, pos_y + (crosshair_size / 2),
+      color);
+  } else {
+    int render_circle_x = 0;
+    int render_circle_y = 0;
+
+    if (stick_has_pos(UP)) render_circle_y -= radius;
+    if (stick_has_pos(DOWN)) render_circle_y += radius;
+    if (stick_has_pos(LEFT)) render_circle_x -= radius;
+    if (stick_has_pos(RIGHT)) render_circle_x += radius;
+
+    if (stick_input == UP_LEFT 
+     || stick_input == UP_RIGHT 
+     || stick_input == DOWN_LEFT 
+     || stick_input == DOWN_RIGHT) {
+      render_circle_x /= (PI / 2);
+      render_circle_y /= (PI / 2);
+    }
+    
+    render_circle_x += pos_x;
+    render_circle_y += pos_y;
+
+    display.drawLine(
+      pos_x, pos_y, 
+      render_circle_x, render_circle_y,
+      color);
+  }
+}
+
+void draw_main_screen() {
+  draw_axis_display_circle(main_axis_display_pos_x, main_axis_display_pos_y, main_axis_display_size, false, true);
+}
+
+void draw_stick_select_screen() {
+  draw_word_centered("CONFIG", 65, 2);
+  draw_word_centered("D-PAD", 65, 24);
+  draw_word_right_align("LEFT", 64 - (stick_select_axis_display_size / 2) - 1, 12);
+  draw_word("RIGHT", 64 + (stick_select_axis_display_size / 2) + 3, 12);
+
+  draw_axis_display(stick_select_axis_display_pos_x, stick_select_axis_display_pos_y, stick_select_axis_display_size, true, true, WHITE);
+
+  if (stick_input == UP) 
+    display.fillRect(64 - (3 * 6), 1, 6 * 6+1, 9, INVERSE);
+  if (stick_input == DOWN) 
+    display.fillRect(65 - (3 * 6)+2, 32-9, 5 * 6+1, 9, INVERSE);
+  if (stick_input == LEFT) 
+    display.fillRect(64 - (stick_select_axis_display_size / 2) - (4 * 6) - 2, 11, 4 * 6 + 2, 9, INVERSE);
+  if (stick_input == RIGHT) 
+    display.fillRect(64 + (stick_select_axis_display_size / 2)+1, 11, 5 * 6 + 2, 9, INVERSE);
+
+}
+
+void draw_config_menu() {
+
 }
