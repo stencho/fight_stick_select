@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace Image2Bytes {
@@ -140,6 +141,8 @@ namespace Image2Bytes {
         const int WM_MOVING = 0x0216;
         const int WM_SIZING = 0x0214;
         const int WM_ENTERSIZEMOVE = 0x0231;
+        const int WM_ACTIVATEAPP = 0x001C;
+
 
         protected override void WndProc(ref Message m) {
             switch (m.Msg) {
@@ -155,10 +158,19 @@ namespace Image2Bytes {
                     GetWindowRect(this.Handle, out gwr);
                     GetWindowRect(output_form.Handle, out output_gwr);
 
-                    MoveWindow(output_form.Handle, 
-                        gwr.Right - 7, gwr.Top, 
-                        output_gwr.Width, output_gwr.Height, 
+                    MoveWindow(output_form.Handle,
+                        gwr.Right - 7, gwr.Top,
+                        output_gwr.Width, output_gwr.Height,
                         false);
+
+                    break;
+
+                case WM_ACTIVATEAPP:
+                    bool b = m.WParam.ToInt32() == 1;
+                    if (b) {
+                        BringWindowToTop(output_form.Handle);
+                        BringWindowToTop(Handle);
+                    }
 
                     break;
             }
