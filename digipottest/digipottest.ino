@@ -35,15 +35,15 @@ enum stick_position {
 };
 
 enum stick_output {
-  LEFT,
-  RIGHT, 
+  LEFT_STICK,
+  RIGHT_STICK, 
   DPAD
 };
+
 static stick_output current_output_mode = DPAD;
 
 static stick_position stick_input = CENTER;
 static stick_position previous_stick_input = CENTER;
-
 
 void setup() {
   Serial.begin(115200);
@@ -162,6 +162,10 @@ static void set_dpad(stick_position sp) {
       break;
     case UP:
       digitalWrite(DPAD_UP,LOW);
+      break;
+    case UP_RIGHT:
+      digitalWrite(DPAD_UP,LOW);
+      digitalWrite(DPAD_RIGHT,LOW);
       break;
     case RIGHT:
       digitalWrite(DPAD_RIGHT,LOW);
