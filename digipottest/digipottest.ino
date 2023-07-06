@@ -34,13 +34,12 @@ enum stick_position {
   CENTER = 0 
 };
 
-enum output_mode {
-  DPAD,
-  JOYSTICK,
-  RIGHT_JOYSTICK
+enum stick_output {
+  LEFT,
+  RIGHT, 
+  DPAD
 };
-
-static output_mode current_output_mode = DPAD;
+static stick_output current_output_mode = DPAD;
 
 static stick_position stick_input = CENTER;
 static stick_position previous_stick_input = CENTER;
@@ -163,10 +162,6 @@ static void set_dpad(stick_position sp) {
       break;
     case UP:
       digitalWrite(DPAD_UP,LOW);
-      break;
-    case UP_RIGHT:
-      digitalWrite(DPAD_UP,LOW);
-      digitalWrite(DPAD_RIGHT,LOW);
       break;
     case RIGHT:
       digitalWrite(DPAD_RIGHT,LOW);
