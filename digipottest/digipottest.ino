@@ -1,9 +1,7 @@
 #include <Adafruit_NeoPixel.h>
 
-#define LED_PIN 8
-#define DISABLE_PIN A0
-
-Adafruit_NeoPixel strip(2, LED_PIN, NEO_GRB + NEO_KHZ800);
+#define MODE_PIN_1 A0
+#define MODE_PIN_2 A1
 
 #include <MCP4131.h>
 
@@ -17,10 +15,20 @@ Adafruit_NeoPixel strip(2, LED_PIN, NEO_GRB + NEO_KHZ800);
 #define DPAD_LEFT 1
 #define DPAD_DOWN 0
 
-static bool disable_output = false;
+#define LEFT_STICK_CS_X 10
+#define LEFT_STICK_CS_Y 9
 
-MCP4131 pX(10);
-MCP4131 pY(9);
+//#define RIGHT_STICK_CS_X A2
+//#define RIGHT_STICK_CS_Y A3
+
+MCP4131 pX(LEFT_STICK_CS_X);
+MCP4131 pY(LEFT_STICK_CS_Y);
+
+//MCP4131 prX(RIGHT_STICK_CS_X);
+//MCP4131 prY(RIGHT_STICK_CS_Y);
+
+static bool disable_control = false;
+const bool print_info = true;
 
 enum stick_position {
   UP = 1 << 0, 
@@ -33,26 +41,34 @@ enum stick_position {
   DOWN_RIGHT = DOWN | RIGHT,
   CENTER = 0 
 };
-
-enum stick_output {
-  LEFT_STICK,
-  RIGHT_STICK, 
-  DPAD
-};
-
-static stick_output current_output_mode = DPAD;
-
 static stick_position stick_input = CENTER;
 static stick_position previous_stick_input = CENTER;
 
+enum stick_mode : byte {
+  LEFT_STICK = (1 << 0) | (1 << 1),
+  DPAD = (1 << 0),
+  RIGHT_STICK = (1 << 1), 
+  NONE = 0
+};
+
+static stick_mode current_control_mode = DPAD;
+
+stick_mode read_control_mode() {
+  stick_mode om = NONE;  
+  bool b1 = digitalRead(MODE_PIN_1) == LOW;
+  bool b2 = digitalRead(MODE_PIN_2) == LOW;
+
+  if (b1) om = (stick_mode)(om | (1 << 0));
+  if (b2) om = (stick_mode)(om | (1 << 1));
+  
+  return om;
+}
+
 void setup() {
   Serial.begin(115200);
-  // put your setup code here, to run once:
-  strip.begin();
-  //pinMode(5,OUTPUT);
-  //pinMode(6,OUTPUT);
-
-  pinMode(DISABLE_PIN, INPUT_PULLUP);
+  
+  pinMode(MODE_PIN_1, INPUT_PULLUP);
+  pinMode(MODE_PIN_2, INPUT_PULLUP);
 
   pinMode(INPUT_UP, INPUT_PULLUP);
   pinMode(INPUT_DOWN, INPUT_PULLUP);
@@ -68,49 +84,72 @@ void setup() {
   digitalWrite(DPAD_DOWN,HIGH);
   digitalWrite(DPAD_LEFT,HIGH);
   digitalWrite(DPAD_RIGHT,HIGH);
-    
-  //pX.writeWiper(i);
 }
 
+stick_mode previous_control_mode;
+
 void loop() {
-  strip.setPixelColor(0, 250,0,170);
-  strip.setPixelColor(1, 250,0,170);
-  strip.show();
-
   read_stick();
- 
-  disable_output = digitalRead(DISABLE_PIN) == LOW;
 
-  if (disable_output) {
-    set_stick(CENTER);
+  previous_control_mode = current_control_mode;
+  current_control_mode = read_control_mode();
+  
+  if (print_info) {
+    if (previous_control_mode != current_control_mode) {
+      Serial.print("[MODE CHANGE] ");
+      print_mode(previous_control_mode);
+      Serial.print("->");
+      print_mode(current_control_mode);
+      Serial.println();
+    }  
+  }
+
+  if (disable_control) {
+    ls_set(CENTER);
     set_dpad(CENTER);
     
   } else if (stick_input != previous_stick_input) {
-    set_stick(stick_input);
+    ls_set(stick_input);
     set_dpad(stick_input);
 
     stick_position pressed = (stick_position)(stick_input & ~previous_stick_input);
     stick_position released = (stick_position)(~stick_input & previous_stick_input);
 
-    print_stick_pos(stick_input);
-    Serial.print(" -> ");
-    print_stick_pos(previous_stick_input);
-    
-    Serial.print(" [state]");
-    printBinShort(stick_input);
-    if (pressed != 0) {
-      Serial.print(" [pressed]");
-      printBinShort(pressed);
+    if (print_info) {
+      Serial.print("[");
+      print_mode(current_control_mode);
+      Serial.print("] ");
+
+      print_stick_pos(stick_input);
+      Serial.print(" -> ");
+      print_stick_pos(previous_stick_input);
+      
+      Serial.print(" [state]");
+      printBin(stick_input, 4);
+
+      if (pressed != 0) {
+        Serial.print(" [pressed]");
+        printBin(pressed, 4);
+      }
+      if (released != 0) {
+        Serial.print(" [released]");
+        printBin(released, 3);
+      }
+      
+      Serial.print("\n");    
     }
-    if (released != 0) {
-      Serial.print(" [released]");
-      printBinShort(released);
-    }
-    
-    Serial.print("\n");    
   }      
 
   delay(3);
+}
+
+static void print_mode(stick_mode sm) {
+  switch (sm) {
+    case NONE: Serial.print("NONE"); return;
+    case DPAD: Serial.print("DPAD"); return;
+    case LEFT_STICK: Serial.print("LEFT_STICK"); return;
+    case RIGHT_STICK: Serial.print("RIGHT_STICK"); return;
+  }
 }
 
 static void print_stick_pos(stick_position sp) {
@@ -137,8 +176,8 @@ static void read_stick() {
   stick_input = sp;
 }
 
-void printBinShort(byte aByte) {
-  for (int8_t aBit = 3; aBit >= 0; aBit--)
+void printBin(byte aByte, byte n) {
+  for (int8_t aBit = n-1; aBit >= 0; aBit--)
     Serial.write(bitRead(aByte, aBit) ? '1' : '0');
 }
 
@@ -186,52 +225,67 @@ static void set_dpad(stick_position sp) {
 }
 
 //SELECT LEFT JOYSTICK POTENTIOMETER
-void select_x() {
-  digitalWrite(9,HIGH);
-  digitalWrite(10,LOW);
+void ls_select_x() {
+  digitalWrite(LEFT_STICK_CS_X,LOW);
+  digitalWrite(LEFT_STICK_CS_Y,HIGH);
 }
-void select_y() {
-  digitalWrite(9,LOW);
-  digitalWrite(10,HIGH);
+void ls_select_y() {
+  digitalWrite(LEFT_STICK_CS_X,HIGH);
+  digitalWrite(LEFT_STICK_CS_Y,LOW);
 }
 
-static void set_stick(stick_position sp) {  
+//RIGHT JOYSTICK POTENTIOMETER
+/*
+void rs_select_x() {
+  digitalWrite(RIGHT_STICK_CS_X,LOW);
+  digitalWrite(RIGHT_STICK_CS_Y,HIGH);  
+}
+void rs_select_y() {
+  digitalWrite(RIGHT_STICK_CS_X,HIGH);
+  digitalWrite(RIGHT_STICK_CS_Y,LOW);  
+}
+
+void rs_set(stick_position sp) {}
+
+*/
+
+void ls_set(stick_position sp) {  
   switch (sp) {
     case LEFT:  
-      select_x(); pX.writeWiper(0); 
-      select_y(); pY.writeWiper(64);
+      ls_select_x(); pX.writeWiper(0); 
+      ls_select_y(); pY.writeWiper(64);
       break;
     case UP_LEFT:
-      select_x(); pX.writeWiper(0); 
-      select_y(); pY.writeWiper(128); 
+      ls_select_x(); pX.writeWiper(0); 
+      ls_select_y(); pY.writeWiper(128); 
       break;
     case UP:
-      select_x(); pX.writeWiper(64); 
-      select_y(); pY.writeWiper(128);
+      ls_select_x(); pX.writeWiper(64); 
+      ls_select_y(); pY.writeWiper(128);
       break;
     case UP_RIGHT:
-      select_x(); pX.writeWiper(128); 
-      select_y(); pY.writeWiper(128); 
+      ls_select_x(); pX.writeWiper(128); 
+      ls_select_y(); pY.writeWiper(128); 
       break;
     case RIGHT:
-      select_x(); pX.writeWiper(128); 
-      select_y(); pY.writeWiper(64);
+      ls_select_x(); pX.writeWiper(128); 
+      ls_select_y(); pY.writeWiper(64);
       break;
     case DOWN_RIGHT:
-      select_x(); pX.writeWiper(128); 
-      select_y(); pY.writeWiper(0); 
+      ls_select_x(); pX.writeWiper(128); 
+      ls_select_y(); pY.writeWiper(0); 
       break;
     case DOWN:
-       select_x(); pX.writeWiper(64); 
-       select_y(); pY.writeWiper(0);
+       ls_select_x(); pX.writeWiper(64); 
+       ls_select_y(); pY.writeWiper(0);
       break;
     case DOWN_LEFT:
-      select_x(); pX.writeWiper(0); 
-      select_y(); pY.writeWiper(0);
+      ls_select_x(); pX.writeWiper(0); 
+      ls_select_y(); pY.writeWiper(0);
       break;
     case CENTER:
-      select_x(); pX.writeWiper(64); 
-      select_y(); pY.writeWiper(64); 
+      ls_select_x(); pX.writeWiper(64); 
+      ls_select_y(); pY.writeWiper(64); 
       break;
   }  
 }

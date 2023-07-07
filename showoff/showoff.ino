@@ -8,13 +8,13 @@
 #define INPUT_LEFT 11
 #define INPUT_RIGHT 10
 
-#define DISABLE_CONTROLLER 6
+#define MODE_PIN_1 6
+#define MODE_PIN_2 9
 
-#define MENU_PIN A5
+#define MENU_BUTTON_PIN A5
 
 #define LED_PIN 5
 
-//JOYSTICK INPUT
 enum stick_position {
   UP = 1 << 0, 
   DOWN = 1 << 1, 
@@ -27,16 +27,21 @@ enum stick_position {
   CENTER = 0 
 };
 
-enum stick_output {
-  LEFT_STICK,
-  RIGHT_STICK, 
-  DPAD
+enum stick_mode : byte {
+  LEFT_STICK = (1 << 0) | (1 << 1),
+  DPAD = (1 << 0),
+  RIGHT_STICK = (1 << 1), 
+  NONE = 0
 };
 
-static stick_output current_output_mode = DPAD;
 
+//JOYSTICK INPUT
 static stick_position stick_input = CENTER;
 static stick_position previous_stick_input = CENTER;
+
+void printBin(byte aByte, int n) {
+  for (int8_t aBit = n-1; aBit >= 0; aBit--) Serial.write(bitRead(aByte, aBit) ? '1' : '0');
+}
 
 static void read_stick() {
   previous_stick_input = stick_input;
@@ -50,17 +55,44 @@ static void read_stick() {
 
 bool stick_has_pos(stick_position pos) { return ((stick_input & pos) == pos); }
 
-//STICK SELECTOR DISABLE PIN
+//MODE OUTPUT
+static stick_mode current_control_mode = DPAD;
+static stick_mode stored_control_mode = DPAD;
+
+void change_stick_mode(stick_mode new_mode) {
+  bool b1 = bitRead(new_mode, 0) == 1;
+  bool b2 = bitRead(new_mode, 1) == 1;
+  
+  if (b1) {
+    digitalWrite(MODE_PIN_1, LOW);
+  } else {
+    digitalWrite(MODE_PIN_1, HIGH);
+  }
+  
+  if (b2) {
+    digitalWrite(MODE_PIN_2, LOW);
+  } else {
+    digitalWrite(MODE_PIN_2, HIGH);
+  }
+
+  printBin(new_mode, 8);  
+  Serial.write(b1 ? " true" : " false");
+  Serial.write(b2 ? " true" : " false");
+  Serial.println();
+  current_control_mode = new_mode;
+}
+
 bool controller_enabled = true;
 
 void enable_controller_input() { 
   controller_enabled = true;
-  digitalWrite(DISABLE_CONTROLLER, HIGH);
+  change_stick_mode(stored_control_mode);  
 }
 
 void disable_controller_input() {
   controller_enabled = false;
-  digitalWrite(DISABLE_CONTROLLER, LOW);
+  stored_control_mode = current_control_mode;
+  change_stick_mode(NONE);
 }
 
 //LED VARS
@@ -92,6 +124,7 @@ static int last_activity = 0;
 const int blank_delay = 1000;
 static bool blanked = false;
 
+//DRAWING FUNCTIONS
 void draw_word(char* text, int X, int Y) {draw_word(text, X, Y, WHITE, CLEAR_FEATURE);}
 void draw_word(char* text, int X, int Y, int color_fg, int color_bg) {
   int length = strlen(text);
@@ -119,11 +152,12 @@ void setup() {
   pinMode(INPUT_LEFT, INPUT_PULLUP);
   pinMode(INPUT_RIGHT, INPUT_PULLUP);
   
-  pinMode(DISABLE_CONTROLLER, OUTPUT);
+  pinMode(MODE_PIN_1, OUTPUT);
+  pinMode(MODE_PIN_2, OUTPUT);
 
-  pinMode(MENU_PIN, INPUT_PULLUP);
+  pinMode(MENU_BUTTON_PIN, INPUT_PULLUP);  
 
-  enable_controller_input();
+  change_stick_mode(DPAD);
 
   Serial.begin(115200);
 
@@ -155,6 +189,9 @@ void loop() {
 
   strip.show();
   read_stick();
+
+  change_stick_mode(current_control_mode);
+
 
   pressed = (stick_position)(stick_input & ~previous_stick_input);
   released = (stick_position)(~stick_input & previous_stick_input);
@@ -205,9 +242,11 @@ void loop() {
     
     if (!menu_button_down) {    
       if (stick_input == UP) { current_state = CONFIG; current_state = MAIN;  }
-      else if (stick_input == DOWN) { current_output_mode = DPAD; current_state = MAIN; }
-      else if (stick_input == LEFT) { current_output_mode = LEFT_STICK; current_state = MAIN; }
-      else if (stick_input == RIGHT) { current_output_mode = RIGHT_STICK; current_state = MAIN; }
+
+      else if (stick_input == DOWN) { stored_control_mode = DPAD; change_stick_mode(DPAD); current_state = MAIN; } 
+      else if (stick_input == LEFT) { stored_control_mode = LEFT_STICK; change_stick_mode(LEFT_STICK); current_state = MAIN; }
+      else if (stick_input == RIGHT) { stored_control_mode = RIGHT_STICK; change_stick_mode(RIGHT_STICK); current_state = MAIN; }
+
       else { current_state = MAIN; }
     }
   } else if (current_state == CONFIG) {    
@@ -253,18 +292,6 @@ void draw_axis_display(int pos_x, int pos_y, int size, bool draw_line = false, b
       pos_x, pos_y, 
       render_circle_x, render_circle_y,
       color);
-
-    /*
-    display.drawLine(
-      render_circle_x - (crosshair_size / 2), render_circle_y, 
-      render_circle_x + (crosshair_size / 2), render_circle_y,
-      color);
-    
-    display.drawLine(
-      render_circle_x, render_circle_y - (crosshair_size / 2), 
-      render_circle_x, render_circle_y + (crosshair_size / 2),
-      color);
-      */
   }
 }
 
@@ -278,7 +305,7 @@ void draw_axis_display_circle(int pos_x, int pos_y, int radius, bool draw_line =
       radius,color);
   }
 
-  if (stick_input == CENTER) {    
+  if (stick_input == CENTER || returning_to_main) {    
     display.drawLine(
       pos_x - (crosshair_size / 2), pos_y, 
       pos_x + (crosshair_size / 2), pos_y,
@@ -314,8 +341,20 @@ void draw_axis_display_circle(int pos_x, int pos_y, int radius, bool draw_line =
   }
 }
 
+
+char* m = "poo";
+
 void draw_main_screen() {
   draw_axis_display_circle(main_axis_display_pos_x, main_axis_display_pos_y, main_axis_display_size, false, true);
+
+  switch (current_control_mode) {
+    case NONE: m = "DISABLED"; break;
+    case DPAD: m = "D-PAD"; break;
+    case LEFT_STICK: m = "LEFT STICK"; break;
+    case RIGHT_STICK: m = "RIGHT STICK"; break;
+  }
+
+  draw_word(m, 33, 13);
 }
 
 void draw_stick_select_screen() {
