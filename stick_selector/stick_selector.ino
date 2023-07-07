@@ -1,9 +1,10 @@
+#define PRINT_INFO true
+
 #include <Adafruit_NeoPixel.h>
+#include <MCP4131.h>
 
 #define MODE_PIN_1 A0
 #define MODE_PIN_2 A1
-
-#include <MCP4131.h>
 
 #define INPUT_UP 7
 #define INPUT_DOWN 6
@@ -21,15 +22,14 @@
 #define RIGHT_STICK_CS_X A2
 //#define RIGHT_STICK_CS_Y A3
 
+//stick potentiometers
 MCP4131 pX(LEFT_STICK_CS_X);
 MCP4131 pY(LEFT_STICK_CS_Y);
 
 MCP4131 prX(RIGHT_STICK_CS_X);
 //MCP4131 prY(RIGHT_STICK_CS_Y);
 
-static bool disable_control = false;
-const bool print_info = true;
-
+//ENUMS
 enum stick_position {
   UP = 1 << 0, 
   DOWN = 1 << 1, 
@@ -41,8 +41,6 @@ enum stick_position {
   DOWN_RIGHT = DOWN | RIGHT,
   CENTER = 0 
 };
-static stick_position stick_input = CENTER;
-static stick_position previous_stick_input = CENTER;
 
 enum stick_mode : byte {
   LEFT_STICK = (1 << 0) | (1 << 1),
@@ -51,7 +49,26 @@ enum stick_mode : byte {
   NONE = 0
 };
 
-static stick_mode current_control_mode = DPAD;
+//STATE
+stick_position stick_input = CENTER;
+stick_position previous_stick_input = CENTER;
+
+stick_mode previous_control_mode;
+stick_mode current_control_mode = DPAD;
+
+void read_stick() {
+  previous_stick_input = stick_input;
+  stick_position sp = CENTER;
+  if (digitalRead(INPUT_UP) == LOW) { sp = (stick_position)(sp | UP); }
+  if (digitalRead(INPUT_DOWN) == LOW) { sp = (stick_position)(sp | DOWN); }
+  if (digitalRead(INPUT_LEFT) == LOW) { sp = (stick_position)(sp | LEFT); }
+  if (digitalRead(INPUT_RIGHT) == LOW) { sp = (stick_position)(sp | RIGHT); }
+  stick_input = sp;
+}
+
+bool stick_has_pos(stick_position pos) {
+  return ((stick_input & pos) == pos);
+}
 
 stick_mode read_control_mode() {
   stick_mode om = NONE;  
@@ -64,6 +81,8 @@ stick_mode read_control_mode() {
   return om;
 }
 
+
+//MAIN
 void setup() {
   Serial.begin(115200);
   
@@ -86,15 +105,13 @@ void setup() {
   digitalWrite(DPAD_RIGHT,HIGH);
 }
 
-stick_mode previous_control_mode;
-
 void loop() {
-  read_stick();
-
   previous_control_mode = current_control_mode;
   current_control_mode = read_control_mode();
+
+  read_stick();
   
-  if (print_info) {
+  if (PRINT_INFO) {
     if (previous_control_mode != current_control_mode) {
       Serial.print("[MODE CHANGE] ");
       print_mode(previous_control_mode);
@@ -104,20 +121,34 @@ void loop() {
     }  
   }
 
-  if (disable_control) {
+  if (current_control_mode == NONE) {
     ls_set(CENTER);
     rs_set(CENTER);
     set_dpad(CENTER);
     
   } else if (stick_input != previous_stick_input) {
-    ls_set(stick_input);
-    rs_set(stick_input);
-    set_dpad(stick_input);
+    if (current_control_mode == DPAD) {
+      set_dpad(stick_input);
+      ls_set(CENTER);
+      rs_set(CENTER);
+    } else if (current_control_mode == LEFT_STICK) {
+      ls_set(stick_input);
+      rs_set(CENTER);
+      set_dpad(CENTER);
+    } else if (current_control_mode == RIGHT_STICK) {
+      ls_set(CENTER);
+      rs_set(stick_input);
+      set_dpad(CENTER);
+    } else {
+      ls_set(CENTER);
+      rs_set(CENTER);
+      set_dpad(CENTER);
+    }
 
     stick_position pressed = (stick_position)(stick_input & ~previous_stick_input);
     stick_position released = (stick_position)(~stick_input & previous_stick_input);
 
-    if (print_info) {
+    if (PRINT_INFO) {
       Serial.print("[");
       print_mode(current_control_mode);
       Serial.print("] ");
@@ -145,6 +176,13 @@ void loop() {
   delay(3);
 }
 
+
+//PRINT FUNCTIONS
+void printBin(byte aByte, byte n) {
+  for (int8_t aBit = n-1; aBit >= 0; aBit--)
+    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
+}
+
 static void print_mode(stick_mode sm) {
   switch (sm) {
     case NONE: Serial.print("NONE"); return;
@@ -168,25 +206,8 @@ static void print_stick_pos(stick_position sp) {
   }  
 }
 
-static void read_stick() {
-  previous_stick_input = stick_input;
-  stick_position sp = CENTER;
-  if (digitalRead(INPUT_UP) == LOW) { sp = (stick_position)(sp | UP); }
-  if (digitalRead(INPUT_DOWN) == LOW) { sp = (stick_position)(sp | DOWN); }
-  if (digitalRead(INPUT_LEFT) == LOW) { sp = (stick_position)(sp | LEFT); }
-  if (digitalRead(INPUT_RIGHT) == LOW) { sp = (stick_position)(sp | RIGHT); }
-  stick_input = sp;
-}
 
-void printBin(byte aByte, byte n) {
-  for (int8_t aBit = n-1; aBit >= 0; aBit--)
-    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
-}
-
-bool stick_has_pos(stick_position pos) {
-  return ((stick_input & pos) == pos);
-}
-
+//DPAD CONTROL
 static void set_dpad(stick_position sp) {  
   digitalWrite(DPAD_UP,HIGH);
   digitalWrite(DPAD_DOWN,HIGH);
@@ -226,80 +247,30 @@ static void set_dpad(stick_position sp) {
   }  
 }
 
-//SELECT LEFT JOYSTICK POTENTIOMETER
+//STICK POTENTIOMETERS
 void ls_select_x() {
-  digitalWrite(RIGHT_STICK_CS_X,HIGH);
-  //digitalWrite(RIGHT_STICK_CS_Y,HIGH);
-
   digitalWrite(LEFT_STICK_CS_X,LOW);
   digitalWrite(LEFT_STICK_CS_Y,HIGH);
 }
 void ls_select_y() {
-  digitalWrite(RIGHT_STICK_CS_X,HIGH);
-  //digitalWrite(RIGHT_STICK_CS_Y,HIGH);
-
   digitalWrite(LEFT_STICK_CS_X,HIGH);
   digitalWrite(LEFT_STICK_CS_Y,LOW);
 }
 
-//RIGHT JOYSTICK POTENTIOMETER
 void rs_select_x() {
-  digitalWrite(LEFT_STICK_CS_X,HIGH);
-  digitalWrite(LEFT_STICK_CS_Y,HIGH);
-
   digitalWrite(RIGHT_STICK_CS_X,LOW);
   //digitalWrite(RIGHT_STICK_CS_Y,HIGH);  
 }
 void rs_select_y() {
-  digitalWrite(LEFT_STICK_CS_X,HIGH);
-  digitalWrite(LEFT_STICK_CS_Y,HIGH);
-
   digitalWrite(RIGHT_STICK_CS_X,HIGH);
   //digitalWrite(RIGHT_STICK_CS_Y,LOW);  
 }
 
-void rs_set(stick_position sp) {
-  switch (sp) {
-    case LEFT:  
-      rs_select_x(); prX.writeWiper(0); 
-      //rs_select_y(); prY.writeWiper(64);
-      break;
-    case UP_LEFT:
-      rs_select_x(); prX.writeWiper(0); 
-      //rs_select_y(); prY.writeWiper(128); 
-      break;
-    case UP:
-      rs_select_x(); prX.writeWiper(64); 
-      //rs_select_y(); prY.writeWiper(128);
-      break;
-    case UP_RIGHT:
-      rs_select_x(); prX.writeWiper(128); 
-      //rs_select_y(); prY.writeWiper(128); 
-      break;
-    case RIGHT:
-      rs_select_x(); prX.writeWiper(128); 
-      //rs_select_y(); prY.writeWiper(64);
-      break;
-    case DOWN_RIGHT:
-      rs_select_x(); prX.writeWiper(128); 
-      //rs_select_y(); prY.writeWiper(0); 
-      break;
-    case DOWN:
-       rs_select_x(); prX.writeWiper(64); 
-       //rs_select_y(); prY.writeWiper(0);
-      break;
-    case DOWN_LEFT:
-      rs_select_x(); prX.writeWiper(0); 
-      //rs_select_y(); prY.writeWiper(0);
-      break;
-    case CENTER:
-      rs_select_x(); prX.writeWiper(64); 
-      //rs_select_y(); prY.writeWiper(64); 
-      break;
-  }
-}
-
+//STICK POSITION SELECTION
 void ls_set(stick_position sp) {  
+  digitalWrite(RIGHT_STICK_CS_X,HIGH);
+  //digitalWrite(RIGHT_STICK_CS_Y,HIGH);
+
   switch (sp) {
     case LEFT:  
       ls_select_x(); pX.writeWiper(0); 
@@ -338,4 +309,55 @@ void ls_set(stick_position sp) {
       ls_select_y(); pY.writeWiper(64); 
       break;
   }  
+
+  digitalWrite(LEFT_STICK_CS_X,HIGH);
+  digitalWrite(LEFT_STICK_CS_Y,HIGH);
 }
+
+void rs_set(stick_position sp) {
+  digitalWrite(LEFT_STICK_CS_X,HIGH);
+  digitalWrite(LEFT_STICK_CS_Y,HIGH);
+
+  switch (sp) {
+    case LEFT:  
+      rs_select_x(); prX.writeWiper(0); 
+      //rs_select_y(); prY.writeWiper(64);
+      break;
+    case UP_LEFT:
+      rs_select_x(); prX.writeWiper(0); 
+      //rs_select_y(); prY.writeWiper(128); 
+      break;
+    case UP:
+      rs_select_x(); prX.writeWiper(64); 
+      //rs_select_y(); prY.writeWiper(128);
+      break;
+    case UP_RIGHT:
+      rs_select_x(); prX.writeWiper(128); 
+      //rs_select_y(); prY.writeWiper(128); 
+      break;
+    case RIGHT:
+      rs_select_x(); prX.writeWiper(128); 
+      //rs_select_y(); prY.writeWiper(64);
+      break;
+    case DOWN_RIGHT:
+      rs_select_x(); prX.writeWiper(128); 
+      //rs_select_y(); prY.writeWiper(0); 
+      break;
+    case DOWN:
+       rs_select_x(); prX.writeWiper(64); 
+       //rs_select_y(); prY.writeWiper(0);
+      break;
+    case DOWN_LEFT:
+      rs_select_x(); prX.writeWiper(0); 
+      //rs_select_y(); prY.writeWiper(0);
+      break;
+    case CENTER:
+      rs_select_x(); prX.writeWiper(64); 
+      //rs_select_y(); prY.writeWiper(64); 
+      break;
+  }
+
+  digitalWrite(RIGHT_STICK_CS_X,HIGH);
+  //digitalWrite(RIGHT_STICK_CS_Y,HIGH); 
+}
+
