@@ -1,4 +1,4 @@
-#define PRINT_INFO true
+#define PRINT_INFO false
 
 #include <Adafruit_NeoPixel.h>
 #include <MCP4131.h>
@@ -106,10 +106,9 @@ void setup() {
 }
 
 void loop() {
-  previous_control_mode = current_control_mode;
-  current_control_mode = read_control_mode();
 
   read_stick();
+  current_control_mode = read_control_mode();
   
   if (PRINT_INFO) {
     if (previous_control_mode != current_control_mode) {
@@ -120,6 +119,7 @@ void loop() {
       Serial.println();
     }  
   }
+
 
   if (current_control_mode == NONE) {
     ls_set(CENTER);
@@ -173,7 +173,8 @@ void loop() {
     }
   }      
 
-  delay(3);
+  //delay(3);
+  previous_control_mode = current_control_mode;
 }
 
 
