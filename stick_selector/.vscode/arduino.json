@@ -1,6 +1,6 @@
 {
     "board": "arduino:avr:leonardo",
-    "sketch": "digipottest.ino",
+    "sketch": "stick_selector.ino",
     "output": "../../build",
     "port": "COM28"
 }

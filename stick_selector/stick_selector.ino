@@ -18,13 +18,13 @@
 #define LEFT_STICK_CS_X 10
 #define LEFT_STICK_CS_Y 9
 
-//#define RIGHT_STICK_CS_X A2
+#define RIGHT_STICK_CS_X A2
 //#define RIGHT_STICK_CS_Y A3
 
 MCP4131 pX(LEFT_STICK_CS_X);
 MCP4131 pY(LEFT_STICK_CS_Y);
 
-//MCP4131 prX(RIGHT_STICK_CS_X);
+MCP4131 prX(RIGHT_STICK_CS_X);
 //MCP4131 prY(RIGHT_STICK_CS_Y);
 
 static bool disable_control = false;
@@ -106,10 +106,12 @@ void loop() {
 
   if (disable_control) {
     ls_set(CENTER);
+    rs_set(CENTER);
     set_dpad(CENTER);
     
   } else if (stick_input != previous_stick_input) {
     ls_set(stick_input);
+    rs_set(stick_input);
     set_dpad(stick_input);
 
     stick_position pressed = (stick_position)(stick_input & ~previous_stick_input);
@@ -226,28 +228,76 @@ static void set_dpad(stick_position sp) {
 
 //SELECT LEFT JOYSTICK POTENTIOMETER
 void ls_select_x() {
+  digitalWrite(RIGHT_STICK_CS_X,HIGH);
+  //digitalWrite(RIGHT_STICK_CS_Y,HIGH);
+
   digitalWrite(LEFT_STICK_CS_X,LOW);
   digitalWrite(LEFT_STICK_CS_Y,HIGH);
 }
 void ls_select_y() {
+  digitalWrite(RIGHT_STICK_CS_X,HIGH);
+  //digitalWrite(RIGHT_STICK_CS_Y,HIGH);
+
   digitalWrite(LEFT_STICK_CS_X,HIGH);
   digitalWrite(LEFT_STICK_CS_Y,LOW);
 }
 
 //RIGHT JOYSTICK POTENTIOMETER
-/*
 void rs_select_x() {
+  digitalWrite(LEFT_STICK_CS_X,HIGH);
+  digitalWrite(LEFT_STICK_CS_Y,HIGH);
+
   digitalWrite(RIGHT_STICK_CS_X,LOW);
-  digitalWrite(RIGHT_STICK_CS_Y,HIGH);  
+  //digitalWrite(RIGHT_STICK_CS_Y,HIGH);  
 }
 void rs_select_y() {
+  digitalWrite(LEFT_STICK_CS_X,HIGH);
+  digitalWrite(LEFT_STICK_CS_Y,HIGH);
+
   digitalWrite(RIGHT_STICK_CS_X,HIGH);
-  digitalWrite(RIGHT_STICK_CS_Y,LOW);  
+  //digitalWrite(RIGHT_STICK_CS_Y,LOW);  
 }
 
-void rs_set(stick_position sp) {}
-
-*/
+void rs_set(stick_position sp) {
+  switch (sp) {
+    case LEFT:  
+      rs_select_x(); prX.writeWiper(0); 
+      //rs_select_y(); prY.writeWiper(64);
+      break;
+    case UP_LEFT:
+      rs_select_x(); prX.writeWiper(0); 
+      //rs_select_y(); prY.writeWiper(128); 
+      break;
+    case UP:
+      rs_select_x(); prX.writeWiper(64); 
+      //rs_select_y(); prY.writeWiper(128);
+      break;
+    case UP_RIGHT:
+      rs_select_x(); prX.writeWiper(128); 
+      //rs_select_y(); prY.writeWiper(128); 
+      break;
+    case RIGHT:
+      rs_select_x(); prX.writeWiper(128); 
+      //rs_select_y(); prY.writeWiper(64);
+      break;
+    case DOWN_RIGHT:
+      rs_select_x(); prX.writeWiper(128); 
+      //rs_select_y(); prY.writeWiper(0); 
+      break;
+    case DOWN:
+       rs_select_x(); prX.writeWiper(64); 
+       //rs_select_y(); prY.writeWiper(0);
+      break;
+    case DOWN_LEFT:
+      rs_select_x(); prX.writeWiper(0); 
+      //rs_select_y(); prY.writeWiper(0);
+      break;
+    case CENTER:
+      rs_select_x(); prX.writeWiper(64); 
+      //rs_select_y(); prY.writeWiper(64); 
+      break;
+  }
+}
 
 void ls_set(stick_position sp) {  
   switch (sp) {
