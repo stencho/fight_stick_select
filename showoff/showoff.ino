@@ -1,3 +1,5 @@
+#define USE_LCD false
+
 #include <Adafruit_NeoPixel.h>
 #include <gfxfont.h>
 #include <Adafruit_SSD1306.h>
@@ -15,6 +17,7 @@
 
 #define LED_PIN 5
 
+//ENUMS
 enum stick_position {
   UP = 1 << 0, 
   DOWN = 1 << 1, 
@@ -35,14 +38,20 @@ enum stick_mode : byte {
 };
 
 
-//JOYSTICK INPUT
+//JOYSTICK STATE AND FUNCTIONS
 static stick_position stick_input = CENTER;
 static stick_position previous_stick_input = CENTER;
 
-void printBin(byte aByte, int n) {
-  for (int8_t aBit = n-1; aBit >= 0; aBit--) Serial.write(bitRead(aByte, aBit) ? '1' : '0');
+static stick_position pressed;
+static stick_position released;
+
+/// @brief print n individual bits of byte b
+void print_bits(byte b, int n) {
+  for (int8_t i = n-1; i >= 0; i--) 
+    Serial.write(bitRead(b, i) ? '1' : '0');
 }
 
+/// @brief read joystick input pins and update stick_input
 static void read_stick() {
   previous_stick_input = stick_input;
   stick_position sp = CENTER;
@@ -53,12 +62,14 @@ static void read_stick() {
   stick_input = sp;
 }
 
+/// @brief returns true if stick_input contains pos, i.e. UP in UP, UP_LEFT or UP_RIGHT
 bool stick_has_pos(stick_position pos) { return ((stick_input & pos) == pos); }
 
-//MODE OUTPUT
+//MODE STATE AND FUNCTIONS
 static stick_mode current_control_mode = DPAD;
 static stick_mode stored_control_mode = DPAD;
 
+/// @brief updates the control mode output pins and current_control_mode
 void change_stick_mode(stick_mode new_mode) {
   bool b1 = bitRead(new_mode, 0) == 1;
   bool b2 = bitRead(new_mode, 1) == 1;
@@ -75,22 +86,14 @@ void change_stick_mode(stick_mode new_mode) {
     digitalWrite(MODE_PIN_2, HIGH);
   }
 
-  printBin(new_mode, 8);  
-  Serial.write(b1 ? " true" : " false");
-  Serial.write(b2 ? " true" : " false");
-  Serial.println();
   current_control_mode = new_mode;
 }
 
-bool controller_enabled = true;
-
 void enable_controller_input() { 
-  controller_enabled = true;
   change_stick_mode(stored_control_mode);  
 }
 
 void disable_controller_input() {
-  controller_enabled = false;
   stored_control_mode = current_control_mode;
   change_stick_mode(NONE);
 }
@@ -103,49 +106,57 @@ int led_r = 250; int led_g = 0; int led_b = 170;
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+#if USE_LCD
+  Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+#endif
 
-enum LCD_menu_state { MAIN, STICK_SELECT, CONFIG };
+enum LCD_menu_state { MAIN, STICK_SELECT };
 LCD_menu_state current_state = MAIN;
 LCD_menu_state old_state = MAIN;
 
+bool returning_to_main = false;
 bool menu_button_down = false;
-bool menu_button_was_down = false;
 
-const int stick_select_axis_display_pos_x = 64;
-const int stick_select_axis_display_pos_y = 16;
-const int stick_select_axis_display_size = 12; //stick to even numbers
+#if USE_LCD
+  const int stick_select_axis_display_pos_x = 64;
+  const int stick_select_axis_display_pos_y = 24;
+  const int stick_select_axis_display_size = 12; //stick to even numbers
 
-const int main_axis_display_pos_x = 15;
-const int main_axis_display_pos_y = 16;
-const int main_axis_display_size = 15;
+  const int main_axis_display_pos_x = 15;
+  const int main_axis_display_pos_y = 16;
+  const int main_axis_display_size = 15;
 
-static int last_activity = 0;
-const int blank_delay = 1000;
-static bool blanked = false;
+  const int main_mode_name_pos_x = 33;
+  const int main_mode_name_pos_y = 13;
 
-//DRAWING FUNCTIONS
-void draw_word(char* text, int X, int Y) {draw_word(text, X, Y, WHITE, CLEAR_FEATURE);}
-void draw_word(char* text, int X, int Y, int color_fg, int color_bg) {
-  int length = strlen(text);
+  static int last_activity = 0;
+  const int blank_delay = 1000;
+  static bool blanked = false;
 
-  for (int i = 0; i < length; i++) {
-    display.drawChar(X + (i * 6), Y, *(text + i), color_fg, color_bg, 1);
+  //DRAWING FUNCTIONS
+  void draw_word(char* text, int X, int Y) {draw_word(text, X, Y, WHITE, CLEAR_FEATURE);}
+  void draw_word(char* text, int X, int Y, int color_fg, int color_bg) {
+    int length = strlen(text);
+
+    for (int i = 0; i < length; i++) {
+      display.drawChar(X + (i * 6), Y, *(text + i), color_fg, color_bg, 1);
+    }
   }
-}
 
-void draw_word_centered(char* text, int X, int Y) {draw_word_centered(text, X, Y, WHITE, CLEAR_FEATURE);}
-void draw_word_centered(char* text, int X, int Y, int color_fg, int color_bg) {
-  int length = strlen(text);
-  draw_word(text, X-((length * 6) / 2), Y, color_fg, color_bg);
-}
+  void draw_word_centered(char* text, int X, int Y) {draw_word_centered(text, X, Y, WHITE, CLEAR_FEATURE);}
+  void draw_word_centered(char* text, int X, int Y, int color_fg, int color_bg) {
+    int length = strlen(text);
+    draw_word(text, X-((length * 6) / 2), Y, color_fg, color_bg);
+  }
 
-void draw_word_right_align(char* text, int X, int Y) {draw_word_right_align(text, X, Y, WHITE, CLEAR_FEATURE);}
-void draw_word_right_align(char* text, int right_side, int Y, int color_fg, int color_bg) {
-  int length = strlen(text);
-  draw_word(text, (right_side - (length * 6)), Y, color_fg, color_bg);
-}
+  void draw_word_right_align(char* text, int X, int Y) {draw_word_right_align(text, X, Y, WHITE, CLEAR_FEATURE);}
+  void draw_word_right_align(char* text, int right_side, int Y, int color_fg, int color_bg) {
+    int length = strlen(text);
+    draw_word(text, (right_side - (length * 6)), Y, color_fg, color_bg);
+  }
+#endif
 
+//MAIN
 void setup() {
   pinMode(INPUT_UP, INPUT_PULLUP);
   pinMode(INPUT_DOWN, INPUT_PULLUP);  
@@ -161,15 +172,17 @@ void setup() {
 
   Serial.begin(115200);
 
-  display.begin();
-  display.dim(true);
+  #if USE_LCD
+    display.begin();
+    display.dim(true);
 
-  display.clearDisplay();
-  display.display();
+    display.clearDisplay();
+    display.display();
 
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+  #endif
+  
   //RGB lighting
   strip.begin();
   strip.setPixelColor(0, led_r, led_g, led_b);
@@ -177,11 +190,6 @@ void setup() {
   strip.show();
 }
 
-
-static stick_position pressed;
-static stick_position released;
-
-bool returning_to_main = false;
 
 void loop() {
   if (!returning_to_main) returning_to_main = (old_state != MAIN && current_state == MAIN);
@@ -192,38 +200,39 @@ void loop() {
 
   change_stick_mode(current_control_mode);
 
-
   pressed = (stick_position)(stick_input & ~previous_stick_input);
   released = (stick_position)(~stick_input & previous_stick_input);
 
-  menu_button_was_down = menu_button_down;
   menu_button_down = digitalRead(A5) == LOW;
 
-  if (stick_input == CENTER && !menu_button_down) {
-    last_activity++;
+  #if USE_LCD
+    if (stick_input == CENTER && !menu_button_down) {
+      last_activity++;
 
-  } else { 
-    last_activity = 0;
-    blanked = false;
-  }
-
-  //blank the LCD when idle
-  if (last_activity > blank_delay) { 
-    if (!blanked) {
-      display.clearDisplay();
-      display.display();
-      blanked = true;
+    } else { 
+      last_activity = 0;
+      blanked = false;
     }
-    return;
-  }
-  
-  //otherwise draw the screen
 
-  display.clearDisplay();  
-  display.setRotation(0);
+    //blank the LCD when idle
+    if (last_activity > blank_delay) { 
+      if (!blanked) {
+          display.clearDisplay();
+          display.display();
+
+        blanked = true;
+      }
+      return;
+    }
+  
+    display.clearDisplay();  
+    display.setRotation(0);
+  #endif
 
   if (current_state == MAIN) {
-    draw_main_screen();
+    #if USE_LCD
+      draw_main_screen();
+    #endif
 
     if (returning_to_main) {
       if (stick_input == CENTER) {
@@ -238,24 +247,26 @@ void loop() {
     }
 
   } else if (current_state == STICK_SELECT) {
-    draw_stick_select_screen();
+    #if USE_LCD
+      draw_stick_select_screen();
+    #endif
     
     if (!menu_button_down) {    
-      if (stick_input == UP) { current_state = CONFIG; current_state = MAIN;  }
-
-      else if (stick_input == DOWN) { stored_control_mode = DPAD; change_stick_mode(DPAD); current_state = MAIN; } 
+      
+      if (stick_input == UP) { stored_control_mode = DPAD; change_stick_mode(DPAD); current_state = MAIN; } 
       else if (stick_input == LEFT) { stored_control_mode = LEFT_STICK; change_stick_mode(LEFT_STICK); current_state = MAIN; }
       else if (stick_input == RIGHT) { stored_control_mode = RIGHT_STICK; change_stick_mode(RIGHT_STICK); current_state = MAIN; }
 
       else { current_state = MAIN; }
     }
-  } else if (current_state == CONFIG) {    
-    current_state == MAIN;
-  }
+  } 
   
-  display.display();
+  #if USE_LCD
+    display.display(); 
+  #endif
 }
-
+#if USE_LCD
+//DRAWING FUNCTIONS
 void draw_axis_display(int pos_x, int pos_y, int size, bool draw_line = false, bool draw_border = true, int color = WHITE) {
   int crosshair_size = (size / 2);
   if (crosshair_size % 2 != 0)  crosshair_size-=1;
@@ -342,40 +353,32 @@ void draw_axis_display_circle(int pos_x, int pos_y, int radius, bool draw_line =
 }
 
 
-char* m = "poo";
-
+//MAIN/SELECT SCREEN DRAWING CODE
 void draw_main_screen() {
   draw_axis_display_circle(main_axis_display_pos_x, main_axis_display_pos_y, main_axis_display_size, false, true);
-
+  
   switch (current_control_mode) {
-    case NONE: m = "DISABLED"; break;
-    case DPAD: m = "D-PAD"; break;
-    case LEFT_STICK: m = "LEFT STICK"; break;
-    case RIGHT_STICK: m = "RIGHT STICK"; break;
+    case NONE: draw_word("DISABLED", main_mode_name_pos_x, main_mode_name_pos_y); break;
+    case DPAD: draw_word("D-PAD", main_mode_name_pos_x, main_mode_name_pos_y); break;
+    case LEFT_STICK: draw_word("LEFT STICK", main_mode_name_pos_x, main_mode_name_pos_y); break;
+    case RIGHT_STICK: draw_word("RIGHT STICK", main_mode_name_pos_x, main_mode_name_pos_y); break;
   }
-
-  draw_word(m, 33, 13);
 }
 
 void draw_stick_select_screen() {
-  draw_word_centered("CONFIG", 65, 2);
-  draw_word_centered("D-PAD", 65, 24);
-  draw_word_right_align("LEFT", 64 - (stick_select_axis_display_size / 2) - 1, 12);
-  draw_word("RIGHT", 64 + (stick_select_axis_display_size / 2) + 3, 12);
+  draw_word_centered("D-PAD", 65, 10);
+  draw_word_right_align("LEFT", 64 - (stick_select_axis_display_size / 2) - 1, 32-11);
+  draw_word("RIGHT", 64 + (stick_select_axis_display_size / 2) + 3, 32-11);
 
   draw_axis_display(stick_select_axis_display_pos_x, stick_select_axis_display_pos_y, stick_select_axis_display_size, true, true, WHITE);
 
   if (stick_input == UP) 
-    display.fillRect(64 - (3 * 6), 1, 6 * 6+1, 9, INVERSE);
-  if (stick_input == DOWN) 
-    display.fillRect(65 - (3 * 6)+2, 32-9, 5 * 6+1, 9, INVERSE);
+    display.fillRect(64 - (3 * 6), 9, 6 * 6+1, 9, INVERSE);
   if (stick_input == LEFT) 
-    display.fillRect(64 - (stick_select_axis_display_size / 2) - (4 * 6) - 2, 11, 4 * 6 + 2, 9, INVERSE);
+    display.fillRect(64 - (stick_select_axis_display_size / 2) - (4 * 6) - 2, 32-12, 4 * 6 + 2, 9, INVERSE);
   if (stick_input == RIGHT) 
-    display.fillRect(64 + (stick_select_axis_display_size / 2)+1, 11, 5 * 6 + 2, 9, INVERSE);
+    display.fillRect(64 + (stick_select_axis_display_size / 2)+1, 32-12, 5 * 6 + 2, 9, INVERSE);
 
 }
+#endif
 
-void draw_config_menu() {
-
-}
