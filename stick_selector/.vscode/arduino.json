@@ -1,6 +1,0 @@
-{
-    "board": "arduino:avr:leonardo",
-    "sketch": "stick_selector.ino",
-    "output": "../../build",
-    "port": "COM28"
-}
