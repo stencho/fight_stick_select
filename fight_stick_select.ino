@@ -1,7 +1,6 @@
 #include <MCP4131.h>
 #define isLow(pin) (digitalRead(pin) == LOW)
 
-//Enable/disable serial
 #define PRINT_INFO false
 #define USE_LEDS true
 
@@ -33,7 +32,7 @@
   #include <Adafruit_NeoPixel.h>
   #define LED_COUNT 2
   int led_r = 250; int led_g = 0; int led_b = 170;
-  Adafruit_NeoPixel strip(2, LED_PIN, NEO_GRB + NEO_KHZ800);
+  Adafruit_NeoPixel led_strip(2, LED_PIN, NEO_GRB + NEO_KHZ800);
 #endif
 
 //Stick potentiometers
@@ -69,35 +68,35 @@ stick_mode current_control_mode = DPAD;
 stick_mode stored_control_mode = DPAD;
 
 //Joystick input state
-stick_position stick_input = CENTER;
-stick_position previous_stick_input = CENTER;
+stick_position current_joystick_input = CENTER;
+stick_position previous_joystick_input = CENTER;
 
 //Joystick functions
-void change_stick_mode(stick_mode new_mode) {
+void set_control_output_mode(stick_mode new_mode) {  
   current_control_mode = new_mode;
 }
 
-void enable_controller_input() { 
-  change_stick_mode(stored_control_mode);  
+void enable_control_output() { 
+  set_control_output_mode(stored_control_mode);  
 }
 
-void disable_controller_input() {
+void disable_control_output() {
   stored_control_mode = current_control_mode;
-  change_stick_mode(NONE);
+  set_control_output_mode(NONE);
 }
 
-void read_stick() {
-  previous_stick_input = stick_input;
+void read_joystick() {
+  previous_joystick_input = current_joystick_input;
   stick_position sp = CENTER;
   if (isLow(INPUT_UP)) { sp = (stick_position)(sp | UP); }
   if (isLow(INPUT_DOWN)) { sp = (stick_position)(sp | DOWN); }
   if (isLow(INPUT_LEFT)) { sp = (stick_position)(sp | LEFT); }
   if (isLow(INPUT_RIGHT)) { sp = (stick_position)(sp | RIGHT); }
-  stick_input = sp;
+  current_joystick_input = sp;
 }
 
 bool stick_has_pos(stick_position pos) {
-  return ((stick_input & pos) == pos);
+  return ((current_joystick_input & pos) == pos);
 }
 
 //mode selection state
@@ -132,41 +131,43 @@ void setup() {
   digitalWrite(DPAD_RIGHT,HIGH);
 
   #if USE_LEDS
-    //RGB lighting
-    strip.begin();
-    strip.setPixelColor(0, led_r, led_g, led_b);
-    strip.setPixelColor(1, led_r, led_g, led_b);
-    strip.show();
+    led_strip.begin();
+    led_strip.setPixelColor(0, led_r, led_g, led_b);
+    led_strip.setPixelColor(1, led_r, led_g, led_b);
+    led_strip.show();
   #endif
 }
 
 
 void loop() {
+  //set up returning_to_main as true if we're coming back from selecting a new control output method
   if (!returning_to_main) returning_to_main = (old_state != MAIN && current_state == MAIN);
-  old_state = current_state;
+  old_state = current_state; //this is the only place old_state matters, so do this here
 
-  read_stick();
+  //reads the INPUT_<dir> pins and sets up current_joystick_input
+  read_joystick();
 
   menu_button_down = isLow(MENU_BUTTON_PIN);
 
+  //Handle 
   if (current_state == MAIN) {
     if (returning_to_main) {
-      if (stick_input == CENTER) {
+      if (current_joystick_input == CENTER) {
         returning_to_main = false;
-        enable_controller_input();
+        enable_control_output();
       } 
     }
 
     if (menu_button_down) {
       current_state = STICK_SELECT;
-      disable_controller_input();
+      disable_control_output();
     }
 
   } else if (current_state == STICK_SELECT) {
     if (!menu_button_down) {   
-      if (stick_input == UP || stick_input == DOWN) { stored_control_mode = DPAD; change_stick_mode(DPAD); current_state = MAIN; } 
-      else if (stick_input == LEFT) { stored_control_mode = LEFT_STICK; change_stick_mode(LEFT_STICK); current_state = MAIN; }
-      else if (stick_input == RIGHT) { stored_control_mode = RIGHT_STICK; change_stick_mode(RIGHT_STICK); current_state = MAIN; }
+      if (current_joystick_input == UP || current_joystick_input == DOWN) { stored_control_mode = DPAD; set_control_output_mode(DPAD); current_state = MAIN; } 
+      else if (current_joystick_input == LEFT) { stored_control_mode = LEFT_STICK; set_control_output_mode(LEFT_STICK); current_state = MAIN; }
+      else if (current_joystick_input == RIGHT) { stored_control_mode = RIGHT_STICK; set_control_output_mode(RIGHT_STICK); current_state = MAIN; }
 
       else { current_state = MAIN; }
     }    
@@ -179,18 +180,18 @@ void loop() {
     rs_set(CENTER);
     set_dpad(CENTER);
     
-  } else if (stick_input != previous_stick_input) {
+  } else if (current_joystick_input != previous_joystick_input) {
     if (current_control_mode == DPAD) {
-      set_dpad(stick_input);
+      set_dpad(current_joystick_input);
       ls_set(CENTER);
       rs_set(CENTER);
     } else if (current_control_mode == LEFT_STICK) {
-      ls_set(stick_input);
+      ls_set(current_joystick_input);
       rs_set(CENTER);
       set_dpad(CENTER);
     } else if (current_control_mode == RIGHT_STICK) {
       ls_set(CENTER);
-      rs_set(stick_input);
+      rs_set(current_joystick_input);
       set_dpad(CENTER);
     } else {
       ls_set(CENTER);
