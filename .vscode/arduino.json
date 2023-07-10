@@ -1,5 +1,6 @@
 {
     "sketch": "fight_stick_select.ino",
-    "board": "arduino:avr:leonardo",
-    "port": "COM3"
+    "board": "arduino:avr:uno",
+    "port": "COM27",
+    "programmer": "avrispmkii"
 }

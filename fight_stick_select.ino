@@ -1,4 +1,5 @@
-#include <MCP4131.h>
+#include "MCP4131.h"
+
 #define isLow(pin) (digitalRead(pin) == LOW)
 #define isHigh(pin) (digitalRead(pin) == HIGH)
 
@@ -131,6 +132,11 @@ void setup() {
   pinMode(DPAD_DOWN,OUTPUT);
   pinMode(DPAD_LEFT,OUTPUT);
   pinMode(DPAD_RIGHT,OUTPUT);
+  
+  pinMode(LEFT_STICK_CS_X,OUTPUT);
+  pinMode(LEFT_STICK_CS_Y,OUTPUT);
+  pinMode(RIGHT_STICK_CS_X,OUTPUT);
+  pinMode(RIGHT_STICK_CS_Y,OUTPUT);
 
   digitalWrite(DPAD_UP,HIGH);
   digitalWrite(DPAD_DOWN,HIGH);
@@ -146,6 +152,7 @@ void setup() {
 }
 
 void loop() {
+  //delay(3);
   //set up returning_from_selection as true if we're coming back from selecting a new control output method
   if (!returning_from_menu) returning_from_menu = menu_button_just_released();
 
@@ -187,15 +194,17 @@ void loop() {
   } else if (current_joystick_position != previous_joystick_position) {
     if (current_control_mode == DPAD) {
       set_dpad(current_joystick_position);
-      ls_set(CENTER); rs_set(CENTER);
+      //ls_set(CENTER); rs_set(CENTER);
       
     } else if (current_control_mode == LEFT_STICK) {
+      //set_dpad(CENTER);
       ls_set(current_joystick_position);
-      rs_set(CENTER); set_dpad(CENTER);
+      rs_set(CENTER); 
     
     } else if (current_control_mode == RIGHT_STICK) {
+      //set_dpad(CENTER);    
+      ls_set(CENTER);
       rs_set(current_joystick_position);
-      ls_set(CENTER); set_dpad(CENTER);    
     } 
 
     //print debug info if enabled
@@ -277,6 +286,10 @@ void ls_select_y() {
   digitalWrite(LEFT_STICK_CS_X,HIGH);
   digitalWrite(LEFT_STICK_CS_Y,LOW);
 }
+void disable_ls() {
+  digitalWrite(LEFT_STICK_CS_X,HIGH);
+  digitalWrite(LEFT_STICK_CS_Y,HIGH);
+}
 
 void rs_select_x() {
   digitalWrite(RIGHT_STICK_CS_X,LOW);
@@ -286,11 +299,14 @@ void rs_select_y() {
   digitalWrite(RIGHT_STICK_CS_X,HIGH);
   digitalWrite(RIGHT_STICK_CS_Y,LOW);  
 }
+void disable_rs() {
+  digitalWrite(RIGHT_STICK_CS_X,HIGH);
+  digitalWrite(RIGHT_STICK_CS_Y,HIGH);
+}
 
 //STICK POSITION SELECTION
 void ls_set(joystick_position sp) {  
-  digitalWrite(RIGHT_STICK_CS_X,HIGH);
-  digitalWrite(RIGHT_STICK_CS_Y,HIGH);
+  disable_rs();
 
   switch (sp) {
     case LEFT:  
@@ -314,12 +330,12 @@ void ls_set(joystick_position sp) {
       ls_select_y(); pY.writeWiper(64);
       break;
     case DOWN_RIGHT:
-      ls_select_x(); pX.writeWiper(128); 
+      ls_select_x(); pX.writeWiper(128);
       ls_select_y(); pY.writeWiper(0); 
       break;
     case DOWN:
-       ls_select_x(); pX.writeWiper(64); 
-       ls_select_y(); pY.writeWiper(0);
+      ls_select_x(); pX.writeWiper(64); 
+      ls_select_y(); pY.writeWiper(0);
       break;
     case DOWN_LEFT:
       ls_select_x(); pX.writeWiper(0); 
@@ -330,14 +346,10 @@ void ls_set(joystick_position sp) {
       ls_select_y(); pY.writeWiper(64); 
       break;
   }  
-
-  digitalWrite(LEFT_STICK_CS_X,HIGH);
-  digitalWrite(LEFT_STICK_CS_Y,HIGH);
 }
 
 void rs_set(joystick_position sp) {
-  digitalWrite(LEFT_STICK_CS_X,HIGH);
-  digitalWrite(LEFT_STICK_CS_Y,HIGH);
+  disable_ls();
 
   switch (sp) {
     case LEFT:  
@@ -377,9 +389,6 @@ void rs_set(joystick_position sp) {
       rs_select_y(); prY.writeWiper(64); 
       break;
   }
-
-  digitalWrite(RIGHT_STICK_CS_X,HIGH);
-  digitalWrite(RIGHT_STICK_CS_Y,HIGH); 
 }
 
 //PRINT FUNCTIONS
