@@ -1,20 +1,21 @@
 #include <MCP4131.h>
 #define isLow(pin) (digitalRead(pin) == LOW)
+#define isHigh(pin) (digitalRead(pin) == HIGH)
 
 #define PRINT_INFO false
 #define USE_LEDS true
 
-//Pins
+//pins
 #if USE_LEDS
 #define LED_PIN 8
 #endif
 
 #define MENU_BUTTON_PIN A0
 
-#define INPUT_UP 7
-#define INPUT_DOWN 6
-#define INPUT_LEFT 5
-#define INPUT_RIGHT 4
+#define JOYSTICK_UP 7
+#define JOYSTICK_DOWN 6
+#define JOYSTICK_LEFT 5
+#define JOYSTICK_RIGHT 4
 
 #define DPAD_UP 3
 #define DPAD_RIGHT 2
@@ -35,15 +36,15 @@
   Adafruit_NeoPixel led_strip(2, LED_PIN, NEO_GRB + NEO_KHZ800);
 #endif
 
-//Stick potentiometers
+//stick potentiometers
 MCP4131 pX(LEFT_STICK_CS_X);
 MCP4131 pY(LEFT_STICK_CS_Y);
 
 MCP4131 prX(RIGHT_STICK_CS_X);
 MCP4131 prY(RIGHT_STICK_CS_Y);
 
-//Enums
-enum stick_position {
+//enums
+enum joystick_position : byte {
   UP = 1 << 0, 
   DOWN = 1 << 1, 
   LEFT = 1 << 2, 
@@ -55,57 +56,63 @@ enum stick_position {
   CENTER = 0 
 };
 
-enum stick_mode : byte {
+enum joystick_mode : byte {
   LEFT_STICK = (1 << 0),
   DPAD = (1 << 1),
   RIGHT_STICK = (1 << 2), 
   NONE = 0
 };
 
-//Output control mode state
-stick_mode previous_control_mode = DPAD;
-stick_mode current_control_mode = DPAD;
-stick_mode stored_control_mode = DPAD;
+//joystick input state
+joystick_position current_joystick_position = CENTER;
+joystick_position previous_joystick_position = CENTER;
 
-//Joystick input state
-stick_position current_joystick_input = CENTER;
-stick_position previous_joystick_input = CENTER;
+//output control mode state
+joystick_mode stored_control_mode = DPAD;
+joystick_mode current_control_mode = DPAD;
 
-//Joystick functions
-void set_control_output_mode(stick_mode new_mode) {  
+//joystick functions
+void read_joystick() {
+  previous_joystick_position = current_joystick_position;
+  joystick_position sp = CENTER;
+  if (isLow(JOYSTICK_UP)) { sp = (joystick_position)(sp | UP); }
+  if (isLow(JOYSTICK_DOWN)) { sp = (joystick_position)(sp | DOWN); }
+  if (isLow(JOYSTICK_LEFT)) { sp = (joystick_position)(sp | LEFT); }
+  if (isLow(JOYSTICK_RIGHT)) { sp = (joystick_position)(sp | RIGHT); }
+  current_joystick_position = sp;
+}
+
+bool stick_has_pos(joystick_position pos) {
+  return ((current_joystick_position & pos) == pos);
+}
+
+//control output functions
+void set_control_mode(joystick_mode new_mode) {  
+  if (current_control_mode != NONE) stored_control_mode = current_control_mode;
   current_control_mode = new_mode;
 }
 
-void enable_control_output() { 
-  set_control_output_mode(stored_control_mode);  
+void store_control_mode(joystick_mode mode) {  
+  if (mode != NONE) stored_control_mode = mode;
+}
+
+void reenable_control_output() { 
+  set_control_mode(stored_control_mode);  
 }
 
 void disable_control_output() {
-  stored_control_mode = current_control_mode;
-  set_control_output_mode(NONE);
+  if (current_control_mode != NONE) stored_control_mode = current_control_mode;
+  set_control_mode(NONE);
 }
 
-void read_joystick() {
-  previous_joystick_input = current_joystick_input;
-  stick_position sp = CENTER;
-  if (isLow(INPUT_UP)) { sp = (stick_position)(sp | UP); }
-  if (isLow(INPUT_DOWN)) { sp = (stick_position)(sp | DOWN); }
-  if (isLow(INPUT_LEFT)) { sp = (stick_position)(sp | LEFT); }
-  if (isLow(INPUT_RIGHT)) { sp = (stick_position)(sp | RIGHT); }
-  current_joystick_input = sp;
-}
+//mode selection menu state
+bool returning_from_menu = false;
 
-bool stick_has_pos(stick_position pos) {
-  return ((current_joystick_input & pos) == pos);
-}
-
-//mode selection state
 bool menu_button_down = false;
-bool returning_to_main = false;
+bool menu_button_was_down = false;
 
-enum select_state { MAIN, STICK_SELECT };
-select_state current_state = MAIN;
-select_state old_state = MAIN;
+#define menu_button_just_pressed() (menu_button_down && !menu_button_was_down)
+#define menu_button_just_released() (!menu_button_down && menu_button_was_down)
 
 //MAIN
 void setup() {
@@ -115,10 +122,10 @@ void setup() {
 
   pinMode(MENU_BUTTON_PIN, INPUT_PULLUP);
 
-  pinMode(INPUT_UP, INPUT_PULLUP);
-  pinMode(INPUT_DOWN, INPUT_PULLUP);
-  pinMode(INPUT_LEFT, INPUT_PULLUP);
-  pinMode(INPUT_RIGHT, INPUT_PULLUP);
+  pinMode(JOYSTICK_UP, INPUT_PULLUP);
+  pinMode(JOYSTICK_DOWN, INPUT_PULLUP);
+  pinMode(JOYSTICK_LEFT, INPUT_PULLUP);
+  pinMode(JOYSTICK_RIGHT, INPUT_PULLUP);
 
   pinMode(DPAD_UP,OUTPUT);
   pinMode(DPAD_DOWN,OUTPUT);
@@ -138,67 +145,60 @@ void setup() {
   #endif
 }
 
-
 void loop() {
-  //set up returning_to_main as true if we're coming back from selecting a new control output method
-  if (!returning_to_main) returning_to_main = (old_state != MAIN && current_state == MAIN);
-  old_state = current_state; //this is the only place old_state matters, so do this here
+  //set up returning_from_selection as true if we're coming back from selecting a new control output method
+  if (!returning_from_menu) returning_from_menu = menu_button_just_released();
 
-  //reads the INPUT_<dir> pins and sets up current_joystick_input
+  //reads the INPUT_<dir> pins and sets up current_joystick_position
   read_joystick();
 
+  //menu button state and control output method selection
+  menu_button_was_down = menu_button_down;
   menu_button_down = isLow(MENU_BUTTON_PIN);
+  
+  //disable controls when menu button is pressed, and set a new control mode when it's released 
+  if (menu_button_just_pressed()) {
+    disable_control_output();
+  }
 
-  //Handle 
-  if (current_state == MAIN) {
-    if (returning_to_main) {
-      if (current_joystick_input == CENTER) {
-        returning_to_main = false;
-        enable_control_output();
-      } 
-    }
-
-    if (menu_button_down) {
-      current_state = STICK_SELECT;
-      disable_control_output();
-    }
-
-  } else if (current_state == STICK_SELECT) {
-    if (!menu_button_down) {   
-      if (current_joystick_input == UP || current_joystick_input == DOWN) { stored_control_mode = DPAD; set_control_output_mode(DPAD); current_state = MAIN; } 
-      else if (current_joystick_input == LEFT) { stored_control_mode = LEFT_STICK; set_control_output_mode(LEFT_STICK); current_state = MAIN; }
-      else if (current_joystick_input == RIGHT) { stored_control_mode = RIGHT_STICK; set_control_output_mode(RIGHT_STICK); current_state = MAIN; }
-
-      else { current_state = MAIN; }
-    }    
+  //when menu button is released, store a new control mode to switch to once control is re-enabled (so, once the stick is centered)
+  if (menu_button_just_released()) {
+    if (current_joystick_position == UP || current_joystick_position == DOWN) 
+      store_control_mode(DPAD); 
+    else if (current_joystick_position == LEFT) 
+      store_control_mode(LEFT_STICK);
+    else if (current_joystick_position == RIGHT) 
+      store_control_mode(RIGHT_STICK); 
   } 
 
-  if (menu_button_down || returning_to_main || current_state != MAIN) return; 
+  //joystick has been centered since returning from selecting a new output mode, so re-enable controls
+  if (!menu_button_down && returning_from_menu && current_joystick_position == CENTER) {
+    returning_from_menu = false;
+    reenable_control_output();
+  }
 
+  //control output currently disabled, center everything
   if (current_control_mode == NONE) {
     ls_set(CENTER);
     rs_set(CENTER);
     set_dpad(CENTER);
-    
-  } else if (current_joystick_input != previous_joystick_input) {
+  
+  //control output enabled, and joystick has changed position, so set the stick wipers and pull dpad buttons low as required
+  } else if (current_joystick_position != previous_joystick_position) {
     if (current_control_mode == DPAD) {
-      set_dpad(current_joystick_input);
-      ls_set(CENTER);
-      rs_set(CENTER);
+      set_dpad(current_joystick_position);
+      ls_set(CENTER); rs_set(CENTER);
+      
     } else if (current_control_mode == LEFT_STICK) {
-      ls_set(current_joystick_input);
-      rs_set(CENTER);
-      set_dpad(CENTER);
+      ls_set(current_joystick_position);
+      rs_set(CENTER); set_dpad(CENTER);
+    
     } else if (current_control_mode == RIGHT_STICK) {
-      ls_set(CENTER);
-      rs_set(current_joystick_input);
-      set_dpad(CENTER);
-    } else {
-      ls_set(CENTER);
-      rs_set(CENTER);
-      set_dpad(CENTER);
-    }
+      rs_set(current_joystick_position);
+      ls_set(CENTER); set_dpad(CENTER);    
+    } 
 
+    //print debug info if enabled
     #if PRINT_INFO
       stick_position pressed = (stick_position)(stick_input & ~previous_stick_input);
       stick_position released = (stick_position)(~stick_input & previous_stick_input);
@@ -226,13 +226,10 @@ void loop() {
       Serial.print("\n");    
     #endif
   }
-
-  previous_control_mode = current_control_mode;   
 }
 
-
 //DPAD CONTROL
-static void set_dpad(stick_position sp) {  
+static void set_dpad(joystick_position sp) {  
   digitalWrite(DPAD_UP,HIGH);
   digitalWrite(DPAD_DOWN,HIGH);
   digitalWrite(DPAD_LEFT,HIGH);
@@ -291,7 +288,7 @@ void rs_select_y() {
 }
 
 //STICK POSITION SELECTION
-void ls_set(stick_position sp) {  
+void ls_set(joystick_position sp) {  
   digitalWrite(RIGHT_STICK_CS_X,HIGH);
   digitalWrite(RIGHT_STICK_CS_Y,HIGH);
 
@@ -338,7 +335,7 @@ void ls_set(stick_position sp) {
   digitalWrite(LEFT_STICK_CS_Y,HIGH);
 }
 
-void rs_set(stick_position sp) {
+void rs_set(joystick_position sp) {
   digitalWrite(LEFT_STICK_CS_X,HIGH);
   digitalWrite(LEFT_STICK_CS_Y,HIGH);
 
@@ -385,14 +382,12 @@ void rs_set(stick_position sp) {
   digitalWrite(RIGHT_STICK_CS_Y,HIGH); 
 }
 
-
 //PRINT FUNCTIONS
-void printBin(byte aByte, byte n) {
-  for (int8_t aBit = n-1; aBit >= 0; aBit--)
-    Serial.write(bitRead(aByte, aBit) ? '1' : '0');
+void print_bits(byte b, byte n) {
+  for (int8_t i = n-1; i >= 0; i--) Serial.write(bitRead(b, i) ? '1' : '0');
 }
 
-static void print_mode(stick_mode sm) {
+static void print_mode(joystick_mode sm) {
   switch (sm) {
     case NONE: Serial.print("NONE"); return;
     case DPAD: Serial.print("DPAD"); return;
@@ -401,7 +396,7 @@ static void print_mode(stick_mode sm) {
   }
 }
 
-static void print_stick_pos(stick_position sp) {
+static void print_stick_pos(joystick_position sp) {
   switch (sp) {
     case LEFT: Serial.print("left"); return;      
     case UP_LEFT: Serial.print("top_left"); return;
